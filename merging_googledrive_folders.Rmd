@@ -38,6 +38,7 @@ colnames(t_grid_df) = c("name", grid_tracker_df %>% pull("postal"))
 
 ```{r}
 col_rename <- function(state, df, t_grid_df){
+  print(glue("operating {state}"))
   state_row = t_grid_df %>% pull(state)
   new_colnames = t_grid_df %>% pull(name)
   keep_cols = intersect(
@@ -47,6 +48,7 @@ col_rename <- function(state, df, t_grid_df){
   mask = match(keep_cols, state_row)
   temp = df %>% select(all_of(keep_cols))
   colnames(temp) = new_colnames[mask]
+  print(glue("completed {state}"))
   return(temp %>% 
     mutate("postal" = state))
 }
@@ -66,7 +68,7 @@ files = drive_ls(folder_id)
 temp_file_dir = glue("{getwd()}/temp.csv")
 output_df = tibble()
 
-for (i in seq_along(head(files$name, 1))) {
+for (i in seq_along(head(files$name))) {
   #list files
   drive_download(
     as_id(files[i,]$id),
@@ -74,16 +76,30 @@ for (i in seq_along(head(files$name, 1))) {
     overwrite=TRUE)
   
   STATE = str_sub(files$name[i],1,2)
-  df = read_csv(temp_file_dir) 
+  df = read_csv(temp_file_dir, col_types = cols(.default = "c"))
   renamed_df = col_rename(STATE, df, t_grid_df)
 
   output_df = output_df %>% bind_rows(renamed_df)
 }
 ```
 
-Verify what the output looks like
+Verify what the output looks like:
 ```{r}
 colnames(output_df)
 output_df$postal %>% unique()
+```
+
+Export the output dataset
+```{r}
+hr_ds_link = "https://drive.google.com/drive/folders/11JHEtDNBQaF5aMXkTAzRaaroJPKUtcbn?usp=sharing"
+hr_ds_id = drive_get(as_id(hr_ds_link))
+
+OUTPUT_DIR = glue("{getwd()}/total_hrcohort.csv.gz")
+write_csv(output_df,  OUTPUT_DIR)
+
+```
+
+```{r}
+drive_upload(OUTPUT_DIR, hr_ds_id, name = "total_hrcohort.csv.gz", overwrite = TRUE, verbose = TRUE)
 ```
 
