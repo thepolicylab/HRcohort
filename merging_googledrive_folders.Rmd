@@ -68,7 +68,7 @@ files = drive_ls(folder_id)
 temp_file_dir = glue("{getwd()}/temp.csv")
 output_df = tibble()
 
-for (i in seq_along(head(files$name))) {
+for (i in seq_along(files$name)) {
   #list files
   drive_download(
     as_id(files[i,]$id),
@@ -100,6 +100,6 @@ write_csv(output_df,  OUTPUT_DIR)
 ```
 
 ```{r}
-drive_upload(OUTPUT_DIR, hr_ds_id, name = "total_hrcohort.csv.gz", overwrite = TRUE, verbose = TRUE)
+drive_upload(OUTPUT_DIR, as_id(hr_ds_id$id), name = "total_hrcohort.csv.gz", overwrite = TRUE, verbose = TRUE)
 ```
 
