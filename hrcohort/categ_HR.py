@@ -9,6 +9,7 @@ Created on Fri Mar  5 12:18:07 2021
 import pandas as pd
 import ftfy
 
+
 #%% Import CSV, drop useless rows, replace NaN, and count duplicates
 # Read the dataframe with pre-set data types.
 orig = pd.read_csv('filtered_hrcohort.csv.gz',
@@ -41,7 +42,7 @@ df.drop_duplicates(inplace=True)
 # univ_sal = sorted(univ_sal)
 
 # # Filter for unexpected symbols
-# weird_syms = sorted([char for char in univ_sal if char not in 
+# weird_syms = sorted([char for char in univ_sal if char not in
 #                   ['_',' ','$',',','.','0','1','2','3','4','5','6','7','8','9']])
 
 # # The string below was my abandoned attempt at constructing a regex from weird_syms
