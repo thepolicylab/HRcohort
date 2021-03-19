@@ -32,9 +32,14 @@ df.drop_duplicates(inplace=True)
 
 # Stripping the commas, and then stripping alphabet and common symbols
 # Kepp this column as string because of all the remaining weirdness
+df.annual_salary.str.contains('E')
+df.annual_salary.str.split('E')
 df.annual_salary = df.annual_salary.str.replace(',', '')\
   .str.strip()\
-  .str.replace(r'[a-zA-Z_$-]', '', regex=True).astype(str)
+  .str.replace(r'[a-zA-D_$-]&[F-Z]', '', regex=True).astype(str)
+
+# df.replace('^Y$', 'Yes')
+# df.replace(r'^.*guay$')
 
 # Let's figure out which ones have 0 length, and set those rows as NA
 is_no_salary = df.annual_salary.apply(lambda x: len(x) == 0)
