@@ -132,13 +132,9 @@ for row in freqs['TEACHER'][1]:
         df['simple_job_title'].iat[row] = 'TEACHER'
 
 for row in freqs['SOFTWARE'][1]:
-    if (df['cleaned_job_title'].iat[row][-8:]=='ENGINEER' 
-    or 'ENGINEER,' in df['cleaned_job_title'].iat[row]
-    or 'ENGINEER ' in df['cleaned_job_title'].iat[row]):
-        if 'SOFTWARE' in df['cleaned_job_title'].iat[row]:
-            df['simple_job_title'].iat[row] = 'SOFTWARE DEVELOPER'
-        elif 'ELECTRICAL' in df['cleaned_job_title'].iat[row]:
-            df['simple_job_title'].iat[row] = 'ELECTRICAL ENGINEER'
+    if ('SOFTWARE DEVELOPER,' in df['cleaned_job_title'].iat[row]
+    or 'DEVELOPMENT SPEC' in df['cleaned_job_title'].iat[row]):
+        df['simple_job_title'].iat[row] = 'SOFTWARE DEVELOPER'
 
 
 for row in freqs['ENGINEER'][1]:
