@@ -29,6 +29,7 @@ df[['postal','agency','annual_salary','yrs_in_service']] = \
 df['year'] = df['year'].fillna(0)
 # Creates a new column with a count of duplicates and then drops duplicates
 df = df.groupby(df.columns.tolist(),as_index=False).size()
+df.rename(columns={'size':'dup_count'}, inplace=True)
 df.drop_duplicates(inplace=True)
 
 #%% This cell is for viewing the weird typography, not a step of cleaning
@@ -84,24 +85,89 @@ for row,job in enumerate(df['temp_job_title']):
 # df_weird_jobs = df[df.temp_job_title.str.contains('\¿|\聽|\†|\�|\聳')]
 
 #%% Substitute blank space instead of any weird symbols/encodings that remain
+# Deliberately preserve slash, comma, apostrophe, paren, and colon for descriptiveness
 for row,job in enumerate(df['temp_job_title']):
     new_job = ''
-    for idx,char in enumerate(job):
-        if char in "!#$%&()*+,-./:;<=?@[\\]_¿‐–†聳聽�":
-            new_job += ' '
+    prev_char = ' '
+    for char in job:
+        if char in """!#$%&*+-.;<=?@[\\]_¿‐–†聳聽�""":
+            if prev_char != ' ':
+                new_job += ' '
+            else:
+                pass
         else: new_job += char
-    df['temp_job_title'].iat[row] = new_job
+        prev_char = char
+    df['temp_job_title'].iat[row] = new_job.strip().upper()
+# Rename the temp column to be cleaned
+df.rename(columns={'temp_job_title':'cleaned_job_title'}, inplace=True)
         
 #%% Find out what the most common words are in the 'job_title' column
 # Create a frequency dictionary of all words used
 freqs = {}
-for job in df['temp_job_title']:
+for row,job in enumerate(df['cleaned_job_title']):
     words = job.split()
     for word in words:
-        if word.upper() not in freqs:
-            freqs[word.upper()] = 0 
-        else: freqs[word.upper()] += 1
-# Sort the dictionary by value (i.e. frequency)
-freqs = dict(sorted(freqs.items(), key=lambda term:term[1]))
+        # Exclude comma that may be at word end
+        while not word[0].isalnum():
+            word = word[1:]
+        while not word[-1].isalnum():
+            word = word[:-1]
+        word = ''.join([let for let in word if let!='/'])
+        if word not in freqs:
+            freqs[word] = [0,[row]] 
+        else:
+            freqs[word][0] += 1
+            freqs[word][1].append(row)
 
-#%% Start 
+# Sort the dictionary by value (i.e. frequency)
+# The following data wrangling relies on manual observations from this dictionary
+freqs = dict(sorted(freqs.items(), key=lambda term:term[1], reverse=True))
+
+#%% Start manually replacing job titles that contain common, unequivocal words
+df.insert(4, 'simple_job_title', ['' for row in range(df.shape[0])])
+
+for row in freqs['TEACHER'][1]:
+    if (df['cleaned_job_title'].iat[row][-7:]=='TEACHER' 
+    or 'TEACHER,' in df['cleaned_job_title'].iat[row]):
+        df['simple_job_title'].iat[row] = 'TEACHER'
+
+for row in freqs['SOFTWARE'][1]:
+    if (df['cleaned_job_title'].iat[row][-8:]=='ENGINEER' 
+    or 'ENGINEER,' in df['cleaned_job_title'].iat[row]
+    or 'ENGINEER ' in df['cleaned_job_title'].iat[row]):
+        if 'SOFTWARE' in df['cleaned_job_title'].iat[row]:
+            df['simple_job_title'].iat[row] = 'SOFTWARE DEVELOPER'
+        elif 'ELECTRICAL' in df['cleaned_job_title'].iat[row]:
+            df['simple_job_title'].iat[row] = 'ELECTRICAL ENGINEER'
+
+
+for row in freqs['ENGINEER'][1]:
+    if (df['cleaned_job_title'].iat[row][-8:]=='ENGINEER' 
+    or 'ENGINEER,' in df['cleaned_job_title'].iat[row]
+    or 'ENGINEER ' in df['cleaned_job_title'].iat[row]):
+        if 'SOFTWARE' in df['cleaned_job_title'].iat[row]:
+            df['simple_job_title'].iat[row] = 'SOFTWARE DEVELOPER'
+        elif 'ELECTRICAL' in df['cleaned_job_title'].iat[row]:
+            df['simple_job_title'].iat[row] = 'ELECTRICAL ENGINEER'
+        elif 'MECHANICAL' in df['cleaned_job_title'].iat[row]:
+            df['simple_job_title'].iat[row] = 'MECHANICAL ENGINEER'        
+        elif 'STRUCTURAL' in df['cleaned_job_title'].iat[row]:
+            df['simple_job_title'].iat[row] = 'STRUCTURAL ENGINEER' 
+        elif 'TRANSPORTATION' in df['cleaned_job_title'].iat[row]:
+            df['simple_job_title'].iat[row] = 'TRANSPORTATION ENGINEER'
+        elif 'ENVIRONMENTAL' in df['cleaned_job_title'].iat[row]:
+            df['simple_job_title'].iat[row] = 'ENVIRONMENTAL ENGINEER'
+        elif 'CIVIL' in df['cleaned_job_title'].iat[row]:
+            df['simple_job_title'].iat[row] = 'CIVIL ENGINEER'
+
+# Deal with titles later 'lead, principal, chief, manager, technician, intern, supervisor
+# senior, supervising, '
+
+for row in freqs['OFFICER'][1]:
+    if (df['cleaned_job_title'].iat[row][-7:]=='OFFICER' 
+    or 'OFFICER,' in df['cleaned_job_title'].iat[row]
+    or 'OFFICER ' in df['cleaned_job_title'].iat[row]):
+        if 'ELECTRICAL' in df['cleaned_job_title'].iat[row]:
+            df['simple_job_title'].iat[row] = 'ELECTRICAL ENGINEER'
+        elif 'MECHANICAL' in df['cleaned_job_title'].iat[row]:
+            df['simple_job_title'].iat[row] = 'MECHANICAL ENGINEER'        
