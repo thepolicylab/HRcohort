@@ -86,6 +86,8 @@ for row,job in enumerate(df['temp_job_title']):
 
 #%% Substitute blank space instead of any weird symbols/encodings that remain
 # Deliberately preserve slash, comma, apostrophe, paren, and colon for descriptiveness
+# At the time of creation, the string below represented all symbols in the dataset
+# except for those mentioned in the preceding comment
 for row,job in enumerate(df['temp_job_title']):
     new_job = ''
     prev_char = ' '
@@ -107,12 +109,12 @@ freqs = {}
 for row,job in enumerate(df['cleaned_job_title']):
     words = job.split()
     for word in words:
-        # Exclude comma that may be at word end
-        while not word[0].isalnum():
+        # Exclude slash, comma, paren, colon from word by stripping the edges of symbols
+        while len(word)>0 and not word[0].isalnum():
             word = word[1:]
-        while not word[-1].isalnum():
+        while len(word)>0 and not word[-1].isalnum():
             word = word[:-1]
-        word = ''.join([let for let in word if let!='/'])
+        word = ''.join([' ' if let=='/' else let for let in word])
         if word not in freqs:
             freqs[word] = [0,[row]] 
         else:
@@ -130,6 +132,9 @@ for row in freqs['TEACHER'][1]:
     if (df['cleaned_job_title'].iat[row][-7:]=='TEACHER' 
     or 'TEACHER,' in df['cleaned_job_title'].iat[row]):
         df['simple_job_title'].iat[row] = 'TEACHER'
+
+df['simple_job_title'][df.cleaned_job_title.str.contains('(?=.*CORR)(?=.*OFFICER)')] \
+    = 'CORRECTIONAL OFFICER'
 
 for row in freqs['SOFTWARE'][1]:
     if ('SOFTWARE DEVELOPER,' in df['cleaned_job_title'].iat[row]
@@ -159,11 +164,11 @@ for row in freqs['ENGINEER'][1]:
 # Deal with titles later 'lead, principal, chief, manager, technician, intern, supervisor
 # senior, supervising, '
 
-for row in freqs['OFFICER'][1]:
-    if (df['cleaned_job_title'].iat[row][-7:]=='OFFICER' 
-    or 'OFFICER,' in df['cleaned_job_title'].iat[row]
-    or 'OFFICER ' in df['cleaned_job_title'].iat[row]):
-        if 'ELECTRICAL' in df['cleaned_job_title'].iat[row]:
-            df['simple_job_title'].iat[row] = 'ELECTRICAL ENGINEER'
-        elif 'MECHANICAL' in df['cleaned_job_title'].iat[row]:
-            df['simple_job_title'].iat[row] = 'MECHANICAL ENGINEER'        
+# for row in freqs['OFFICER'][1]:
+#     if (df['cleaned_job_title'].iat[row][-7:]=='OFFICER' 
+#     or 'OFFICER,' in df['cleaned_job_title'].iat[row]
+#     or 'OFFICER ' in df['cleaned_job_title'].iat[row]):
+#         if 'ELECTRICAL' in df['cleaned_job_title'].iat[row]:
+#             df['simple_job_title'].iat[row] = 'ELECTRICAL ENGINEER'
+#         elif 'MECHANICAL' in df['cleaned_job_title'].iat[row]:
+#             df['simple_job_title'].iat[row] = 'MECHANICAL ENGINEER'        
