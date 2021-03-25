@@ -5,32 +5,43 @@ Created on Fri Mar  5 12:18:07 2021
 @author: dwang
 """
 
-#%% Import libraries
+#%% Importing libraries
+from pathlib import Path
 import pandas as pd
+import numpy as np
 import ftfy
+import re as re
 
-#%% Import CSV, drop useless rows, replace NaN, and count duplicates
+#%% Defining constants
+DATA_DIRECTORY = Path("../data")
+FILTERED_COHORT_FILE = DATA_DIRECTORY / "filtered_hrcohort.csv.gz"
+
+#%% Importing CSV, dropping useless rows, counting+dropping duplicate rows
 # Read the dataframe with pre-set data types.
-orig = pd.read_csv('filtered_hrcohort.csv.gz',
+df = pd.read_csv(FILTERED_COHORT_FILE,
                    compression='gzip',
-                   # encoding='latin_1',
                    dtype={'postal': str, 'year': int, 'job_title': str, 'agency': str,
                           'annual_salary': str, 'yrs_in_service': str})
 
-df = orig
+# Verify if the data columns have been read with correct types
+df.dtypes
 # Drop any row with an empty 'job_title' since they are useless to HRcohort
 df = df[~df['job_title'].isna()]
 # Replace NaN or empty values with an underscore, which is unlikely to be confused with
 # valid, pre-existing job titles
 df[['postal','agency','annual_salary','yrs_in_service']] = \
     df[['postal','agency','annual_salary','yrs_in_service']].fillna('_')
-# Replace NaN or empty values with zero, which is unlikely to be confused with
+# Replace NaN or empty values with -1, which is unlikely to be confused with
 # valid, pre-existing year values
-df['year'] = df['year'].fillna(0)
-# Creates a new column with a count of duplicates and then drops duplicates
+df['year'] = \
+    df['year'].fillna(-1)
+# Create a new column with a count of duplicates and then drop duplicates
 df = df.groupby(df.columns.tolist(),as_index=False).size()
 df.rename(columns={'size':'dup_count'}, inplace=True)
 df.drop_duplicates(inplace=True)
+# Reintroduce NaN
+df[['postal','agency','annual_salary','yrs_in_service']].replace('^_$', np.nan, inplace=True, regex=True)
+df['year'].replace(-1, np.nan, inplace=True)
 
 #%% This cell is for viewing the weird typography, not a step of cleaning
 # # First create full universe of characters used in 'annual_salary'
@@ -50,24 +61,12 @@ df.drop_duplicates(inplace=True)
 # df_weird_sal = df[df['annual_salary'].str.contains(weird_sym)]
 
 #%% Cleaning 'annual_salary'
-# Wipe all characters that are not numeric, a period, or scientific notation
-# Convert all values to dtype float
-
-for row,sal in enumerate(df['annual_salary']):
-    new_sal = ''
-    for idx,char in enumerate(sal):
-        if char.isnumeric() or (char in '.-+E'):
-            new_sal += char
-    # if the value is empty or only one character (for whatever reason), make it 0.001
-    # I chose this value since it is unlikely to be confused valid salaries
-    if not new_sal or len(new_sal)==1:
-        df['annual_salary'].iat[row] = 0.001
-    else: df['annual_salary'].iat[row] = float(new_sal)        
-
-#%% Make new column for job titles being edited, and use FTFY library fix encodings
-df.insert(3, 'temp_job_title', df['job_title'])
-for row,job in enumerate(df['temp_job_title']):
-    df['temp_job_title'].iat[row] = ftfy.fix_text(job)
+# Retain only characters that are numeric, sign, period, or scientific notation
+df['annual_salary'] = df['annual_salary']\
+    .str.replace('[^\dE.+-]+', '', regex=True)
+is_no_sal = df['annual_salary'].apply(lambda x: len(x)==0 or not any([char.isnumeric() for char in x]))
+df.loc[is_no_sal , 'annual_salary'] = np.nan
+df['annual_salary'] = df['annual_salary'].astype(float)
 
 #%% This cell is for viewing the weird typography, not a step of cleaning
 # # First create full universe of characters used in 'temp_job_title'
@@ -84,37 +83,27 @@ for row,job in enumerate(df['temp_job_title']):
 # # This dataframe is mostly for viewing the nature of the irregularities
 # df_weird_jobs = df[df.temp_job_title.str.contains('\¿|\聽|\†|\�|\聳')]
 
-#%% Substitute blank space instead of any weird symbols/encodings that remain
-# Deliberately preserve slash, comma, apostrophe, paren, and colon for descriptiveness
-# At the time of creation, the string below represented all symbols in the dataset
-# except for those mentioned in the preceding comment
-for row,job in enumerate(df['temp_job_title']):
-    new_job = ''
-    prev_char = ' '
-    for char in job:
-        if char in """!#$%&*+-.;<=?@[\\]_¿‐–†聳聽�""":
-            if prev_char != ' ':
-                new_job += ' '
-            else:
-                pass
-        else: new_job += char
-        prev_char = char
-    df['temp_job_title'].iat[row] = new_job.strip().upper()
-# Rename the temp column to be cleaned
+#%% Cleaning 'job_title' and creating 'cleaned_job_title'
+# Make new column for job titles being edited, and use FTFY library to fix encodings
+df.insert(3, 'temp_job_title', df['job_title'])
+df['temp_job_title'] = df['temp_job_title'].apply(lambda x: ftfy.fix_text(x))
+
+# Remove weird encodings and extra whitespace
+df['temp_job_title'] = df['temp_job_title']\
+    .str.strip()\
+    .str.replace(' +', ' ', regex=True)\
+    .str.replace('[¿†聽聳�]', '', regex=True)\
+    .str.upper()
+# Rename the temp column to showed cleaned
 df.rename(columns={'temp_job_title':'cleaned_job_title'}, inplace=True)
         
-#%% Find out what the most common words are in the 'job_title' column
+#%% Creating frequency dictionary of all words used in 'job_title'
 # Create a frequency dictionary of all words used
 freqs = {}
 for row,job in enumerate(df['cleaned_job_title']):
-    words = job.split()
+    pure_job = [' ' if not let.isalnum() else let for let in list(job)]
+    words = ''.join(pure_job).split()
     for word in words:
-        # Exclude slash, comma, paren, colon from word by stripping the edges of symbols
-        while len(word)>0 and not word[0].isalnum():
-            word = word[1:]
-        while len(word)>0 and not word[-1].isalnum():
-            word = word[:-1]
-        word = ''.join([' ' if let=='/' else let for let in word])
         if word not in freqs:
             freqs[word] = [0,[row]] 
         else:
@@ -122,30 +111,48 @@ for row,job in enumerate(df['cleaned_job_title']):
             freqs[word][1].append(row)
 
 # Sort the dictionary by value (i.e. frequency)
-# The following data wrangling relies on manual observations from this dictionary
 freqs = dict(sorted(freqs.items(), key=lambda term:term[1], reverse=True))
 
-#%% Start manually replacing job titles that contain common, unequivocal words
+#%% Creating simple_job_title column and identifying budget analysts, etc.
 df.insert(4, 'simple_job_title', ['' for row in range(df.shape[0])])
 
+for row in freqs['BUDGET'][1]:
+    if bool(re.search('BUDGET ANALYST' , df['cleaned_job_title'].iat[row])):
+        df['simple_job_title'].iat[row] = 'BUDGET ANALYST'
+    else:
+        df['simple_job_title'].iat[row] = 'BUDGET PROFESSIONAL'
+
+ba = df[df['simple_job_title']=='BUDGET ANALYST']
+bp = df[df['simple_job_title']=='BUDGET PROFESSIONAL']
+ba.to_csv('budget_analysts.csv')
+bp.to_csv('budget_professionals.csv')
+
+#%% Manually replacing job titles that contain the most common words
+# Some clunky rules written before Daniel learned regex
 for row in freqs['TEACHER'][1]:
     if (df['cleaned_job_title'].iat[row][-7:]=='TEACHER' 
     or 'TEACHER,' in df['cleaned_job_title'].iat[row]):
         df['simple_job_title'].iat[row] = 'TEACHER'
+    
+for row in freqs['OFFICER'][1]:
+    if bool(re.search('CORR' , df['cleaned_job_title'].iat[row])):
+        df['simple_job_title'].iat[row] = 'CORRECTIONAL OFFICER'
+    
+for row in freqs['ASSISTANT'][1]:
+    if bool(re.search('ADMIN|EXEC|SECRETAR' , df['cleaned_job_title'].iat[row])):
+        df['simple_job_title'].iat[row] = 'ADMINISTRATIVE ASSISTANT'
 
-df['simple_job_title'][df.cleaned_job_title.str.contains('(?=.*CORR)(?=.*OFFICER)')] \
-    = 'CORRECTIONAL OFFICER'
+for row in freqs['IT'][1]:
+    if bool(re.search('IT SPECIALIST' , df['cleaned_job_title'].iat[row])):
+        df['simple_job_title'].iat[row] = 'IT SPECIALIST'
 
 for row in freqs['SOFTWARE'][1]:
-    if ('SOFTWARE DEVELOPER,' in df['cleaned_job_title'].iat[row]
-    or 'DEVELOPMENT SPEC' in df['cleaned_job_title'].iat[row]):
+    if bool(re.search('DEVELOPMENT SPEC|SOFTWARE DEVELOPER' , df['cleaned_job_title'].iat[row])):
         df['simple_job_title'].iat[row] = 'SOFTWARE DEVELOPER'
 
-
 for row in freqs['ENGINEER'][1]:
-    if (df['cleaned_job_title'].iat[row][-8:]=='ENGINEER' 
-    or 'ENGINEER,' in df['cleaned_job_title'].iat[row]
-    or 'ENGINEER ' in df['cleaned_job_title'].iat[row]):
+    if df['cleaned_job_title'].iat[row][-8:]=='ENGINEER' \
+    or bool(re.search('ENGINEER,|ENGINEER ' , df['cleaned_job_title'].iat[row])):
         if 'SOFTWARE' in df['cleaned_job_title'].iat[row]:
             df['simple_job_title'].iat[row] = 'SOFTWARE DEVELOPER'
         elif 'ELECTRICAL' in df['cleaned_job_title'].iat[row]:
@@ -160,15 +167,6 @@ for row in freqs['ENGINEER'][1]:
             df['simple_job_title'].iat[row] = 'ENVIRONMENTAL ENGINEER'
         elif 'CIVIL' in df['cleaned_job_title'].iat[row]:
             df['simple_job_title'].iat[row] = 'CIVIL ENGINEER'
+# Deal with engineer titles later 'lead, principal, chief, manager, technician, intern, supervisor
+# senior, supervising, junior'
 
-# Deal with titles later 'lead, principal, chief, manager, technician, intern, supervisor
-# senior, supervising, '
-
-# for row in freqs['OFFICER'][1]:
-#     if (df['cleaned_job_title'].iat[row][-7:]=='OFFICER' 
-#     or 'OFFICER,' in df['cleaned_job_title'].iat[row]
-#     or 'OFFICER ' in df['cleaned_job_title'].iat[row]):
-#         if 'ELECTRICAL' in df['cleaned_job_title'].iat[row]:
-#             df['simple_job_title'].iat[row] = 'ELECTRICAL ENGINEER'
-#         elif 'MECHANICAL' in df['cleaned_job_title'].iat[row]:
-#             df['simple_job_title'].iat[row] = 'MECHANICAL ENGINEER'        
