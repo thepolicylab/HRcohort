@@ -129,7 +129,7 @@ bp.to_csv('budget_professionals.csv')
 #%% Manually replacing job titles that contain the most common words
 # Some clunky rules written before Daniel learned regex
 for row in freqs['TEACHER'][1]:
-    if (df['cleaned_job_title'].iat[row][-7:]=='TEACHER' 
+    if (df['cleaned_job_title'].iat[row][-7:]=='TEACHER' \
     or 'TEACHER,' in df['cleaned_job_title'].iat[row]):
         df['simple_job_title'].iat[row] = 'TEACHER'
     
