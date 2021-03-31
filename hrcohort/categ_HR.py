@@ -21,7 +21,9 @@ FILTERED_COHORT_FILE = DATA_DIRECTORY / "filtered_hrcohort.csv.gz"
 df = pd.read_csv(FILTERED_COHORT_FILE,
                    compression='gzip',
                    dtype={'postal': str, 'year': int, 'job_title': str, 'agency': str,
-                          'annual_salary': str, 'yrs_in_service': str})
+                          'annual_salary': str, 'yrs_in_service': str},
+#                    encoding='latin1'
+                )
 
 # Verify if the data columns have been read with correct types
 df.dtypes
@@ -29,19 +31,15 @@ df.dtypes
 df = df[~df['job_title'].isna()]
 # Replace NaN or empty values with an underscore, which is unlikely to be confused with
 # valid, pre-existing job titles
-df[['postal','agency','annual_salary','yrs_in_service']] = \
-    df[['postal','agency','annual_salary','yrs_in_service']].fillna('_')
-# Replace NaN or empty values with -1, which is unlikely to be confused with
-# valid, pre-existing year values
-df['year'] = \
-    df['year'].fillna(-1)
+df[['agency','annual_salary','yrs_in_service']] = \
+    df[['agency','annual_salary','yrs_in_service']].fillna('_')
+
 # Create a new column with a count of duplicates and then drop duplicates
 df = df.groupby(df.columns.tolist(),as_index=False).size()
 df.rename(columns={'size':'dup_count'}, inplace=True)
 df.drop_duplicates(inplace=True)
 # Reintroduce NaN
-df[['postal','agency','annual_salary','yrs_in_service']].replace('^_$', np.nan, inplace=True, regex=True)
-df['year'].replace(-1, np.nan, inplace=True)
+df.replace('^_$', pd.NA, inplace=True, regex=True)
 
 #%% This cell is for viewing the weird typography, not a step of cleaning
 # # First create full universe of characters used in 'annual_salary'
@@ -64,7 +62,8 @@ df['year'].replace(-1, np.nan, inplace=True)
 # Retain only characters that are numeric, sign, period, or scientific notation
 df['annual_salary'] = df['annual_salary']\
     .str.replace('[^\dE.+-]+', '', regex=True)
-is_no_sal = df['annual_salary'].apply(lambda x: len(x)==0 or not any([char.isnumeric() for char in x]))
+is_no_sal = df['annual_salary'] \
+    .apply(lambda x: pd.isnull(x) or len(x)==0 or not any([char.isnumeric() for char in x]))
 df.loc[is_no_sal , 'annual_salary'] = np.nan
 df['annual_salary'] = df['annual_salary'].astype(float)
 
