@@ -6,43 +6,56 @@ Created on Fri Mar  5 12:18:07 2021
 """
 
 #%% Importing libraries
-print('Importing libraries')
-from pathlib import Path
-import pandas as pd
-import numpy as np
-import ftfy
+print("Importing libraries")
 import re as re
+from pathlib import Path
+
+import ftfy
+import numpy as np
+import pandas as pd
 
 #%% Defining constants
-print('Defining constants')
+print("Defining constants")
 DATA_DIRECTORY = Path("../data")
 FILTERED_COHORT_FILE = DATA_DIRECTORY / "filtered_hrcohort.csv.gz"
+BUDGET_ANALYST_FILE = DATA_DIRECTORY / "budget_analysts.csv.gz"
+BUDGET_PROFESSIONALS_FILE = DATA_DIRECTORY / "budget_professionals.csv.gz"
+CLEAN_OUTPUT_FILE = DATA_DIRECTORY / "clean_output.csv.gz"
+
 
 #%% Importing CSV, dropping useless rows, counting+dropping duplicate rows
-print('Importing CSV, dropping useless rows, counting+dropping duplicate rows')
+print("Importing CSV, dropping useless rows, counting+dropping duplicate rows")
 # Read the dataframe with pre-set data types.
-df = pd.read_csv(FILTERED_COHORT_FILE,
-                   compression='gzip',
-                   dtype={'postal': str, 'year': int, 'job_title': str, 'agency': str,
-                          'annual_salary': str, 'yrs_in_service': str},
-#                    encoding='latin1'
-                )
+df = pd.read_csv(
+    FILTERED_COHORT_FILE,
+    compression="gzip",
+    dtype={
+        "postal": str,
+        "year": int,
+        "job_title": str,
+        "agency": str,
+        "annual_salary": str,
+        "yrs_in_service": str,
+    },
+    #                    encoding='latin1'
+)
 
 # Verify if the data columns have been read with correct types
 print(df.dtypes)
 # Drop any row with an empty 'job_title' since they are useless to HRcohort
-df = df[~df['job_title'].isna()]
+df = df[~df["job_title"].isna()]
 # Replace NaN or empty values with an underscore, which is unlikely to be confused with
 # valid, pre-existing job titles
-df[['agency','annual_salary','yrs_in_service']] = \
-    df[['agency','annual_salary','yrs_in_service']].fillna('_')
+df[["agency", "annual_salary", "yrs_in_service"]] = df[
+    ["agency", "annual_salary", "yrs_in_service"]
+].fillna("_")
 
 # Create a new column with a count of duplicates and then drop duplicates
-df = df.groupby(df.columns.tolist(),as_index=False).size()
-df.rename(columns={'size':'dup_count'}, inplace=True)
+df = df.groupby(df.columns.tolist(), as_index=False).size()
+df.rename(columns={"size": "dup_count"}, inplace=True)
 df.drop_duplicates(inplace=True)
 # Reintroduce NaN
-df.replace('^_$', pd.NA, inplace=True, regex=True)
+df.replace("^_$", pd.NA, inplace=True, regex=True)
 
 #%% This cell is for viewing the weird typography, not a step of cleaning
 # # First create full universe of characters used in 'annual_salary'
@@ -53,7 +66,7 @@ df.replace('^_$', pd.NA, inplace=True, regex=True)
 # univ_sal = sorted(univ_sal)
 
 # # Filter for unexpected symbols
-# weird_syms = sorted([char for char in univ_sal if char not in 
+# weird_syms = sorted([char for char in univ_sal if char not in
 #                   ['_',' ','$',',','.','0','1','2','3','4','5','6','7','8','9']])
 
 # # The string below was my abandoned attempt at constructing a regex from weird_syms
@@ -64,12 +77,12 @@ df.replace('^_$', pd.NA, inplace=True, regex=True)
 #%% Cleaning 'annual_salary'
 print('Cleaning "annual_salary"')
 # Retain only characters that are numeric, sign, period, or scientific notation
-df['annual_salary'] = df['annual_salary']\
-    .str.replace('[^\dE.+-]+', '', regex=True)
-is_no_sal = df['annual_salary'] \
-    .apply(lambda x: pd.isnull(x) or len(x)==0 or not any([char.isnumeric() for char in x]))
-df.loc[is_no_sal , 'annual_salary'] = np.nan
-df['annual_salary'] = df['annual_salary'].astype(float)
+df["annual_salary"] = df["annual_salary"].str.replace("[^\dE.+-]+", "", regex=True)
+is_no_sal = df["annual_salary"].apply(
+    lambda x: pd.isnull(x) or len(x) == 0 or not any([char.isnumeric() for char in x])
+)
+df.loc[is_no_sal, "annual_salary"] = np.nan
+df["annual_salary"] = df["annual_salary"].astype(float)
 
 #%% This cell is for viewing the weird typography, not a step of cleaning
 # # First create full universe of characters used in 'temp_job_title'
@@ -89,91 +102,101 @@ df['annual_salary'] = df['annual_salary'].astype(float)
 #%% Cleaning 'job_title' and creating 'cleaned_job_title'
 print('Cleaning "job_title" and creating "cleaned_job_title"')
 # Make new column for job titles being edited, and use FTFY library to fix encodings
-df.insert(3, 'temp_job_title', df['job_title'])
-df['temp_job_title'] = df['temp_job_title'].apply(lambda x: ftfy.fix_text(x))
+df.insert(3, "temp_job_title", df["job_title"])
+df["temp_job_title"] = df["temp_job_title"].apply(lambda x: ftfy.fix_text(x))
 
 # Remove weird encodings and extra whitespace
-df['temp_job_title'] = df['temp_job_title']\
-    .str.strip()\
-    .str.replace(' +', ' ', regex=True)\
-    .str.replace('[¿†聽聳�]', '', regex=True)\
+df["temp_job_title"] = (
+    df["temp_job_title"]
+    .str.strip()
+    .str.replace(" +", " ", regex=True)
+    .str.replace("[¿†聽聳�]", "", regex=True)
     .str.upper()
+)
 # Rename the temp column to showed cleaned
-df.rename(columns={'temp_job_title':'cleaned_job_title'}, inplace=True)
-        
+df.rename(columns={"temp_job_title": "cleaned_job_title"}, inplace=True)
+
 #%% Creating frequency dictionary of all words used in 'job_title'
 print('Creating frequency dictionary of all words used in "job_title"')
 # Create a frequency dictionary of all words used
 freqs = {}
-for row,job in enumerate(df['cleaned_job_title']):
-    pure_job = [' ' if not let.isalnum() else let for let in list(job)]
-    words = ''.join(pure_job).split()
+for row, job in enumerate(df["cleaned_job_title"]):
+    pure_job = [" " if not let.isalnum() else let for let in list(job)]
+    words = "".join(pure_job).split()
     for word in words:
         if word not in freqs:
-            freqs[word] = [1,[row]] 
+            freqs[word] = [1, [row]]
         else:
             freqs[word][0] += 1
             freqs[word][1].append(row)
 
 # Sort the dictionary by value (i.e. frequency)
-freqs = dict(sorted(freqs.items(), key=lambda term:term[1], reverse=True))
+freqs = dict(sorted(freqs.items(), key=lambda term: term[1], reverse=True))
 
 #%% Creating 'simple_job_title' column and identifying budget analysts, etc.
 print('Creating "simple_job_title" column and identifying budget analysts, etc.')
-df.insert(4, 'simple_job_title', ['' for row in range(df.shape[0])])
+df.insert(4, "simple_job_title", ["" for row in range(df.shape[0])])
 
-for row in freqs['BUDGET'][1]:
-    if bool(re.search('BUDGET ANALYST' , df['cleaned_job_title'].iat[row])):
-        df['simple_job_title'].iat[row] = 'BUDGET ANALYST'
+for row in freqs["BUDGET"][1]:
+    if bool(re.search("BUDGET ANALYST", df["cleaned_job_title"].iat[row])):
+        df["simple_job_title"].iat[row] = "BUDGET ANALYST"
     else:
-        df['simple_job_title'].iat[row] = 'BUDGET PROFESSIONAL'
+        df["simple_job_title"].iat[row] = "BUDGET PROFESSIONAL"
 
-ba = df[df['simple_job_title']=='BUDGET ANALYST']
-bp = df[df['simple_job_title']=='BUDGET PROFESSIONAL']
-ba.to_csv('budget_analysts.csv')
-bp.to_csv('budget_professionals.csv')
+ba = df[df["simple_job_title"] == "BUDGET ANALYST"]
+bp = df[df["simple_job_title"] == "BUDGET PROFESSIONAL"]
+ba.to_csv(BUDGET_ANALYST_FILE, index=False, compression="gzip")
+bp.to_csv(BUDGET_PROFESSIONALS_FILE, index=False, compression="gzip")
 
 #%% Manually replacing job titles that contain the most common words
-print('Manually replacing job titles that contain the most common words')
+print("Manually replacing job titles that contain the most common words")
 # Some clunky rules were written before Daniel learned regex
-for row in freqs['TEACHER'][1]:
-    if (df['cleaned_job_title'].iat[row][-7:]=='TEACHER' \
-    or 'TEACHER,' in df['cleaned_job_title'].iat[row]):
-        df['simple_job_title'].iat[row] = 'TEACHER'
-    
-for row in freqs['OFFICER'][1] + freqs['OFCR'][1]:
-    if bool(re.search('CORR' , df['cleaned_job_title'].iat[row])):
-        df['simple_job_title'].iat[row] = 'CORRECTIONAL OFFICER'
-    
-for row in freqs['ASSISTANT'][1]:
-    if bool(re.search('ADMIN|EXEC|SECRETAR' , df['cleaned_job_title'].iat[row])):
-        df['simple_job_title'].iat[row] = 'ADMINISTRATIVE ASSISTANT'
+for row in freqs["TEACHER"][1]:
+    if (
+        df["cleaned_job_title"].iat[row][-7:] == "TEACHER"
+        or "TEACHER," in df["cleaned_job_title"].iat[row]
+    ):
+        df["simple_job_title"].iat[row] = "TEACHER"
 
-for row in freqs['IT'][1]:
-    if bool(re.search('IT SPECIALIST' , df['cleaned_job_title'].iat[row])):
-        df['simple_job_title'].iat[row] = 'IT SPECIALIST'
+for row in freqs["OFFICER"][1] + freqs["OFCR"][1]:
+    if bool(re.search("CORR", df["cleaned_job_title"].iat[row])):
+        df["simple_job_title"].iat[row] = "CORRECTIONAL OFFICER"
 
-for row in freqs['SOFTWARE'][1]:
-    if bool(re.search('DEVELOPMENT SPEC|SOFTWARE DEVELOPER' , df['cleaned_job_title'].iat[row])):
-        df['simple_job_title'].iat[row] = 'SOFTWARE DEVELOPER'
+for row in freqs["ASSISTANT"][1]:
+    if bool(re.search("ADMIN|EXEC|SECRETAR", df["cleaned_job_title"].iat[row])):
+        df["simple_job_title"].iat[row] = "ADMINISTRATIVE ASSISTANT"
 
-for row in freqs['ENGINEER'][1]:
-    if df['cleaned_job_title'].iat[row][-8:]=='ENGINEER' \
-    or bool(re.search('ENGINEER,|ENGINEER ' , df['cleaned_job_title'].iat[row])):
-        if 'SOFTWARE' in df['cleaned_job_title'].iat[row]:
-            df['simple_job_title'].iat[row] = 'SOFTWARE DEVELOPER'
-        elif 'ELECTRICAL' in df['cleaned_job_title'].iat[row]:
-            df['simple_job_title'].iat[row] = 'ELECTRICAL ENGINEER'
-        elif 'MECHANICAL' in df['cleaned_job_title'].iat[row]:
-            df['simple_job_title'].iat[row] = 'MECHANICAL ENGINEER'        
-        elif 'STRUCTURAL' in df['cleaned_job_title'].iat[row]:
-            df['simple_job_title'].iat[row] = 'STRUCTURAL ENGINEER' 
-        elif 'TRANSPORTATION' in df['cleaned_job_title'].iat[row]:
-            df['simple_job_title'].iat[row] = 'TRANSPORTATION ENGINEER'
-        elif 'ENVIRONMENTAL' in df['cleaned_job_title'].iat[row]:
-            df['simple_job_title'].iat[row] = 'ENVIRONMENTAL ENGINEER'
-        elif 'CIVIL' in df['cleaned_job_title'].iat[row]:
-            df['simple_job_title'].iat[row] = 'CIVIL ENGINEER'
+for row in freqs["IT"][1]:
+    if bool(re.search("IT SPECIALIST", df["cleaned_job_title"].iat[row])):
+        df["simple_job_title"].iat[row] = "IT SPECIALIST"
+
+for row in freqs["SOFTWARE"][1]:
+    if bool(
+        re.search(
+            "DEVELOPMENT SPEC|SOFTWARE DEVELOPER", df["cleaned_job_title"].iat[row]
+        )
+    ):
+        df["simple_job_title"].iat[row] = "SOFTWARE DEVELOPER"
+
+for row in freqs["ENGINEER"][1]:
+    if df["cleaned_job_title"].iat[row][-8:] == "ENGINEER" or bool(
+        re.search("ENGINEER,|ENGINEER ", df["cleaned_job_title"].iat[row])
+    ):
+        if "SOFTWARE" in df["cleaned_job_title"].iat[row]:
+            df["simple_job_title"].iat[row] = "SOFTWARE DEVELOPER"
+        elif "ELECTRICAL" in df["cleaned_job_title"].iat[row]:
+            df["simple_job_title"].iat[row] = "ELECTRICAL ENGINEER"
+        elif "MECHANICAL" in df["cleaned_job_title"].iat[row]:
+            df["simple_job_title"].iat[row] = "MECHANICAL ENGINEER"
+        elif "STRUCTURAL" in df["cleaned_job_title"].iat[row]:
+            df["simple_job_title"].iat[row] = "STRUCTURAL ENGINEER"
+        elif "TRANSPORTATION" in df["cleaned_job_title"].iat[row]:
+            df["simple_job_title"].iat[row] = "TRANSPORTATION ENGINEER"
+        elif "ENVIRONMENTAL" in df["cleaned_job_title"].iat[row]:
+            df["simple_job_title"].iat[row] = "ENVIRONMENTAL ENGINEER"
+        elif "CIVIL" in df["cleaned_job_title"].iat[row]:
+            df["simple_job_title"].iat[row] = "CIVIL ENGINEER"
 # Deal with engineer titles later 'lead, principal, chief, manager, technician, intern, supervisor
 # senior, supervising, junior'
 
+df.to_csv(CLEAN_OUTPUT_FILE, index=False, compression="gzip")
