@@ -6,6 +6,7 @@ Created on Fri Mar  5 12:18:07 2021
 """
 
 #%% Importing libraries
+print('Importing libraries')
 from pathlib import Path
 import pandas as pd
 import numpy as np
@@ -13,10 +14,12 @@ import ftfy
 import re as re
 
 #%% Defining constants
+print('Defining constants')
 DATA_DIRECTORY = Path("../data")
 FILTERED_COHORT_FILE = DATA_DIRECTORY / "filtered_hrcohort.csv.gz"
 
 #%% Importing CSV, dropping useless rows, counting+dropping duplicate rows
+print('Importing CSV, dropping useless rows, counting+dropping duplicate rows')
 # Read the dataframe with pre-set data types.
 df = pd.read_csv(FILTERED_COHORT_FILE,
                    compression='gzip',
@@ -26,7 +29,7 @@ df = pd.read_csv(FILTERED_COHORT_FILE,
                 )
 
 # Verify if the data columns have been read with correct types
-df.dtypes
+print(df.dtypes)
 # Drop any row with an empty 'job_title' since they are useless to HRcohort
 df = df[~df['job_title'].isna()]
 # Replace NaN or empty values with an underscore, which is unlikely to be confused with
@@ -59,6 +62,7 @@ df.replace('^_$', pd.NA, inplace=True, regex=True)
 # df_weird_sal = df[df['annual_salary'].str.contains(weird_sym)]
 
 #%% Cleaning 'annual_salary'
+print('Cleaning "annual_salary"')
 # Retain only characters that are numeric, sign, period, or scientific notation
 df['annual_salary'] = df['annual_salary']\
     .str.replace('[^\dE.+-]+', '', regex=True)
@@ -83,6 +87,7 @@ df['annual_salary'] = df['annual_salary'].astype(float)
 # df_weird_jobs = df[df.temp_job_title.str.contains('\¿|\聽|\†|\�|\聳')]
 
 #%% Cleaning 'job_title' and creating 'cleaned_job_title'
+print('Cleaning "job_title" and creating "cleaned_job_title"')
 # Make new column for job titles being edited, and use FTFY library to fix encodings
 df.insert(3, 'temp_job_title', df['job_title'])
 df['temp_job_title'] = df['temp_job_title'].apply(lambda x: ftfy.fix_text(x))
@@ -97,6 +102,7 @@ df['temp_job_title'] = df['temp_job_title']\
 df.rename(columns={'temp_job_title':'cleaned_job_title'}, inplace=True)
         
 #%% Creating frequency dictionary of all words used in 'job_title'
+print('Creating frequency dictionary of all words used in "job_title"')
 # Create a frequency dictionary of all words used
 freqs = {}
 for row,job in enumerate(df['cleaned_job_title']):
@@ -104,7 +110,7 @@ for row,job in enumerate(df['cleaned_job_title']):
     words = ''.join(pure_job).split()
     for word in words:
         if word not in freqs:
-            freqs[word] = [0,[row]] 
+            freqs[word] = [1,[row]] 
         else:
             freqs[word][0] += 1
             freqs[word][1].append(row)
@@ -112,7 +118,8 @@ for row,job in enumerate(df['cleaned_job_title']):
 # Sort the dictionary by value (i.e. frequency)
 freqs = dict(sorted(freqs.items(), key=lambda term:term[1], reverse=True))
 
-#%% Creating simple_job_title column and identifying budget analysts, etc.
+#%% Creating 'simple_job_title' column and identifying budget analysts, etc.
+print('Creating "simple_job_title" column and identifying budget analysts, etc.')
 df.insert(4, 'simple_job_title', ['' for row in range(df.shape[0])])
 
 for row in freqs['BUDGET'][1]:
@@ -127,13 +134,14 @@ ba.to_csv('budget_analysts.csv')
 bp.to_csv('budget_professionals.csv')
 
 #%% Manually replacing job titles that contain the most common words
+print('Manually replacing job titles that contain the most common words')
 # Some clunky rules were written before Daniel learned regex
 for row in freqs['TEACHER'][1]:
     if (df['cleaned_job_title'].iat[row][-7:]=='TEACHER' \
     or 'TEACHER,' in df['cleaned_job_title'].iat[row]):
         df['simple_job_title'].iat[row] = 'TEACHER'
     
-for row in freqs['OFFICER'][1]:
+for row in freqs['OFFICER'][1] + freqs['OFCR'][1]:
     if bool(re.search('CORR' , df['cleaned_job_title'].iat[row])):
         df['simple_job_title'].iat[row] = 'CORRECTIONAL OFFICER'
     
