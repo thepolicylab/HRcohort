@@ -6,7 +6,6 @@ Created on Fri Mar  5 12:18:07 2021
 """
 
 #%% Importing libraries
-print("Importing libraries")
 import re as re
 from pathlib import Path
 
