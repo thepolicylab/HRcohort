@@ -3,6 +3,7 @@ import pytest
 
 from hrcohort import cli
 
+
 @pytest.fixture
 def runner():
     return click.testing.CliRunner()
