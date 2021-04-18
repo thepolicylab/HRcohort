@@ -1,3 +1,9 @@
 .idea/
 *.csv.gz
 venv
+*pycache
+__init__
+*.pyc
+*.csv
+*.xlsx
+*.html

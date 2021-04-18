@@ -4,7 +4,7 @@ Refactor code in categ_HR into functions for categ_HR
 from typing import List, Union
 
 import pandas as pd
-
+from hrcohort import constants
 
 def select_budget_analysts(
     df: pd.DataFrame, search_colname: Union[str, List] = "simple_job_title"

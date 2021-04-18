@@ -12,17 +12,18 @@ library('glue')
 
 Identify and download the Grid Tracker
 ```{r}
-grid_tracker_link = 'https://docs.google.com/spreadsheets/d/12NiUpu28SOCQvQTrp17b592cMgOoCgelMQyE1PNZygU/edit?usp=sharing'
+#grid_tracker_link = 'https://docs.google.com/spreadsheets/d/12NiUpu28SOCQvQTrp17b592cMgOoCgel#MQyE1PNZygU/edit?usp=sharing'
+grid_tracker_link = 'https://drive.google.com/file/d/1OIXl72BpQg7RXocMOTLbqQVifbH571dn/view?usp=sharing'
 file_id = drive_get(as_id(grid_tracker_link))
 
-grid_tracker_dir = glue("{getwd()}/grid_tracker.csv")
+grid_tracker_dir = glue("{getwd()}/grid_tracker.xlsx")
 
 drive_download(
     as_id(file_id$id),
     path = grid_tracker_dir,
     overwrite=TRUE)
 
-grid_tracker_df = read_csv(grid_tracker_dir) %>% 
+grid_tracker_df = readxl::read_excel(grid_tracker_dir) %>% 
   select(-c("State"))
 ```
 
@@ -58,7 +59,8 @@ col_rename <- function(state, df, t_grid_df){
 Identify the list of files that require merging:
 (source:https://stackoverflow.com/questions/64687627/download-all-files-and-subdirectories-from-a-google-drive-directory-from-r)
 ```{r}
-share_link = 'https://drive.google.com/drive/folders/1zoeLvd5flvvKFNMSmoRxYhE_LK_-19N5?usp=sharing'
+#share_link = 'https://drive.google.com/drive/folders/1zoeLvd5flvvKFNMSmoRxYhE_LK_-19N5?usp=sh#aring'
+share_link = 'https://drive.google.com/drive/folders/1miOrgG2nVgkFKtpaBeOwhEYeqaFMJFIy?usp=sharing'
 folder_id = drive_get(as_id(share_link))
 # find files in the folder
 files = drive_ls(folder_id)
@@ -91,7 +93,7 @@ output_df$postal %>% unique()
 
 Export the output dataset
 ```{r}
-hr_ds_link = "https://drive.google.com/drive/folders/11JHEtDNBQaF5aMXkTAzRaaroJPKUtcbn?usp=sharing"
+hr_ds_link = "https://drive.google.com/drive/folders/1rGy7qHWjIoqZSaUDh0EO3u_FX7y2N9W-?usp=sharing"
 hr_ds_id = drive_get(as_id(hr_ds_link))
 
 OUTPUT_DIR = glue("{getwd()}/total_hrcohort.csv.gz")
