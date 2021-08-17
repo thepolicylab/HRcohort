@@ -8,100 +8,123 @@ output: html_notebook
 library('googledrive')
 library('tidyverse')
 library('glue')
+library('readxl')
 ```
 
 Identify and download the Grid Tracker
 ```{r}
-#grid_tracker_link = 'https://docs.google.com/spreadsheets/d/12NiUpu28SOCQvQTrp17b592cMgOoCgel#MQyE1PNZygU/edit?usp=sharing'
-grid_tracker_link = 'https://drive.google.com/file/d/1OIXl72BpQg7RXocMOTLbqQVifbH571dn/view?usp=sharing'
+variable_grid_link = 'https://docs.google.com/spreadsheets/d/1ZUJvwD368VP1-BGwm3OWRjjExWGoEEWxcB6oIbtDwTQ/edit?usp=sharing'
 file_id = drive_get(as_id(grid_tracker_link))
-
-grid_tracker_dir = glue("{getwd()}/grid_tracker.xlsx")
+variable_grid_dir = glue("{getwd()}/{file_id$name}.csv")
 
 drive_download(
     as_id(file_id$id),
-    path = grid_tracker_dir,
+    path = variable_grid_dir,
     overwrite=TRUE)
 
-grid_tracker_df = readxl::read_excel(grid_tracker_dir) %>% 
-  select(-c("State"))
+variable_grid_df = read_csv(
+  variable_grid_dir,
+  col_names = c("index", 'state', 'year', 'salary', 'agency',
+                'job_title', 'gender', 'race'), skip=1
+)
+
 ```
 
 ```{r}
-# transpose the grid_tracker_df into t_grid_df
-t_grid_df = grid_tracker_df %>%
-   tibble::rownames_to_column() %>%  
-   pivot_longer(-rowname) %>% 
-   pivot_wider(names_from=rowname, values_from=value)
-
-colnames(t_grid_df) = c("name", grid_tracker_df %>% pull("postal"))
+variable_grid_df = variable_grid_df %>% 
+  drop_na(state) %>% 
+  arrange(index) %>% 
+  mutate(name = state.abb[match(index, state.name)]) %>% 
+  mutate_at(vars(name), ~replace_na(., "DC")) # the R standard lib doesnt have DC
 ```
 
 ```{r}
-col_rename <- function(state, df, t_grid_df){
-  print(glue("operating {state}"))
-  state_row = t_grid_df %>% pull(state)
-  new_colnames = t_grid_df %>% pull(name)
-  keep_cols = intersect(
-    state_row, 
-    colnames(df)
-    )
-  mask = match(keep_cols, state_row)
-  temp = df %>% select(all_of(keep_cols))
-  colnames(temp) = new_colnames[mask]
-  print(glue("completed {state}"))
-  return(temp %>% 
-    mutate("postal" = state))
+get_idkey <- function(state_abbr){
+  relevant_row = variable_grid_df %>% 
+    filter(name == state_abbr) %>% 
+    select(-c('index', 'name')) %>% 
+    select_if(function(x) all(!is.na(x)))
+  
+  original = relevant_row %>% unname() %>% unlist()
+  new = relevant_row %>% colnames() 
+
+  return(tibble(original, new))
 }
+rename_cols <- function(state_abbr, df){
+  idkey = get_idkey(state_abbr)
+  final_df = tryCatch(
+    {
+      return(df %>% 
+               rename_at(vars(as.character(idkey$original)), 
+                         ~ as.character(idkey$new)))
+      },
+    error=function(cond){
+      message("error, attempting alternative")
+      idkey$original = replace(idkey$original, 1, colnames(df)[1])
+      return(df %>% 
+               rename_at(vars(as.character(idkey$original)), 
+                         ~ as.character(idkey$new)))
+    })
+  }
+
 ```
 
 
 Identify the list of files that require merging:
 (source:https://stackoverflow.com/questions/64687627/download-all-files-and-subdirectories-from-a-google-drive-directory-from-r)
 ```{r}
-#share_link = 'https://drive.google.com/drive/folders/1zoeLvd5flvvKFNMSmoRxYhE_LK_-19N5?usp=sh#aring'
-share_link = 'https://drive.google.com/drive/folders/1miOrgG2nVgkFKtpaBeOwhEYeqaFMJFIy?usp=sharing'
+share_link = 'https://drive.google.com/drive/folders/1fdkcqGQCSLvDxa1C1nj_ur1hzrKZf8PX?usp=sharing'
 folder_id = drive_get(as_id(share_link))
 # find files in the folder
 files = drive_ls(folder_id)
+# Select the .csv files, and sort alphabetically
+csv_files = files %>% filter(str_detect(name, "_T.csv")) %>% arrange(name)
 ```
+
+
+
+
 
 ```{r}
 temp_file_dir = glue("{getwd()}/temp.csv")
 output_df = tibble()
 
-for (i in seq_along(files$name)) {
+for (i in seq_along(csv_files$name)) {
   #list files
   drive_download(
-    as_id(files[i,]$id),
+    as_id(csv_files[i,]$id),
     path = temp_file_dir,
     overwrite=TRUE)
   
-  STATE = str_sub(files$name[i],1,2)
+  STATE = str_sub(csv_files$name[i],1,2)
   df = read_csv(temp_file_dir, col_types = cols(.default = "c"))
-  renamed_df = col_rename(STATE, df, t_grid_df)
-
-  output_df = output_df %>% bind_rows(renamed_df)
+  tryCatch(
+    {get_idkey(STATE)
+    renamed_df = rename_cols(STATE, df)
+    output_df = output_df %>% bind_rows(renamed_df)
+    }, error=function(cond){
+      message('failed, skipping state')
+    }
+  )
 }
 ```
+
 
 Verify what the output looks like:
 ```{r}
 colnames(output_df)
-output_df$postal %>% unique()
+output_df$state %>% unique()
 ```
 
 Export the output dataset
 ```{r}
-hr_ds_link = "https://drive.google.com/drive/folders/1rGy7qHWjIoqZSaUDh0EO3u_FX7y2N9W-?usp=sharing"
-hr_ds_id = drive_get(as_id(hr_ds_link))
-
 OUTPUT_DIR = glue("{getwd()}/total_hrcohort.csv.gz")
 write_csv(output_df,  OUTPUT_DIR)
 
 ```
 
 ```{r}
-drive_upload(OUTPUT_DIR, as_id(hr_ds_id$id), name = "total_hrcohort.csv.gz", overwrite = TRUE, verbose = TRUE)
+drive_upload(OUTPUT_DIR, as_id(folder_id$id), name = "total_hrcohort.csv.gz", overwrite = TRUE, verbose = TRUE)
 ```
+
 
